@@ -234,7 +234,8 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             });
 
             const { default: pLimit } = await import('p-limit');
-            const limit = pLimit(15);
+            // const limit = pLimit(15);
+            const limit = pLimit(3);
             console.log(`🚀 Processing ${domains.length} domains...`);
             try {
                 const tasks = domains.map(domain => limit(() => scrapeEmails(domain, browser)));
