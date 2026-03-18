@@ -270,7 +270,7 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
 
                 const { default: pLimit } = await import('p-limit');
                 // const limit = pLimit(15);
-                const limit = pLimit(3);
+                const limit = pLimit(1);
                 console.log(`🚀 Processing ${domains.length} domains...`);
 
                 const tasks = domains.map(domain => limit(() => scrapeEmails(domain, browser)));
@@ -282,7 +282,7 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                     result && result.domain // Sirf ye check karein ki result exist karta hai
                 );
                 const json2csvParser = new Parser({
-                    fields: ['domain', 'emails'], // Sirf ye do columns CSV mein jayenge
+                    fields: ['domain', 'emails'],
                     quote: '',
                     flatten: true
                 });
