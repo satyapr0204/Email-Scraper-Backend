@@ -252,9 +252,9 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             //     //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
             // });
 
-            const browser = await puppeteer.connect({
-                browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
-            });
+            // const browser = await puppeteer.connect({
+            //     browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
+            // });
             // Baaki poora code same rahega!
 
             const { default: pLimit } = await import('p-limit');
@@ -262,6 +262,9 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             const limit = pLimit(3);
             console.log(`🚀 Processing ${domains.length} domains...`);
             try {
+                const browser = await puppeteer.connect({
+                    browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
+                });
                 const tasks = domains.map(domain => limit(() => scrapeEmails(domain, browser)));
                 const allResults = await Promise.all(tasks);
                 // const filteredResults = allResults.filter(result =>
