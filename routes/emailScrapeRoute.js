@@ -95,40 +95,112 @@ function addCleanEmail(email, emailSet) {
     }
 }
 
+// local runing code 
+// async function getSource(url, browser, headers) {
+//     try {
+//         // Try Axios first with full headers
+//         const response = await axios.get(url, {
+//             // headers,
+//             headers: {
+//                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
+//                 'Accept-Language': 'en-US,en;q=0.9',
+//                 'Referer': 'https://www.google.com/'
+//             },
+//             timeout: 15000,
+//             maxRedirects: 5
+//         });
+//         return { html: response.data, method: 'Axios' };
+//     } catch (error) {
+//         // Agar Axios fail ho, toh Puppeteer with Stealth
+//         if (browser) {
+//             const page = await browser.newPage();
+//             // Sabse important: Bot detection bypass karne ke liye
+//             await page.setExtraHTTPHeaders(headers);
+//             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+//             try {
+//                 // await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+//                 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+//                 const html = await page.content();
+//                 await page.close();
+//                 return { html, method: 'Puppeteer' };
+//             } catch (pError) {
+//                 await page.close();
+//                 return { html: null, error: pError.message };
+//             }
+//         }
+//         return { html: null, error: error.message };
+//     }
+// }
+
+
 async function getSource(url, browser, headers) {
+    // 1. Axios Try (With Better Headers)
     try {
-        // Try Axios first with full headers
         const response = await axios.get(url, {
-            // headers,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
-                'Accept-Language': 'en-US,en;q=0.9',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
                 'Referer': 'https://www.google.com/'
             },
-            timeout: 15000,
+            timeout: 10000, // Shopify fast hai, 10s kaafi hai
             maxRedirects: 5
         });
-        return { html: response.data, method: 'Axios' };
-    } catch (error) {
-        // Agar Axios fail ho, toh Puppeteer with Stealth
-        if (browser) {
-            const page = await browser.newPage();
-            // Sabse important: Bot detection bypass karne ke liye
-            await page.setExtraHTTPHeaders(headers);
-
-            try {
-                await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
-                const html = await page.content();
-                await page.close();
-                return { html, method: 'Puppeteer' };
-            } catch (pError) {
-                await page.close();
-                return { html: null, error: pError.message };
-            }
+        
+        // Agar Axios se content mil gaya aur wo "Forbidden" ya "Captcha" wala nahi hai
+        if (response.data && !response.data.includes("Cloudflare") && !response.data.includes("captcha")) {
+            return { html: response.data, method: 'Axios' };
         }
-        return { html: null, error: error.message };
+    } catch (error) {
+        console.log(`Axios failed for ${url}, switching to Puppeteer...`);
     }
+
+    // 2. Puppeteer Fallback (With Connection Fix)
+    if (browser) {
+        let page;
+        try {
+            page = await browser.newPage();
+            
+            // Shopify/Cloudflare ke liye zaroori
+            await page.setViewport({ width: 1280, height: 800 });
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+                if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+                    req.abort();
+                } else {
+                    req.continue();
+                }
+            });
+
+            // Navigation with Retry Logic
+            await page.goto(url, { 
+                waitUntil: 'domcontentloaded', // Fast aur accurate Shopify ke liye
+                timeout: 50000 
+            });
+
+            // Extra wait taaki agar JS se emails load ho rahe hon
+            await new Promise(resolve => setTimeout(resolve, 3000)); 
+
+            const html = await page.content();
+            return { html, method: 'Puppeteer' };
+
+        } catch (pError) {
+            console.error(`Puppeteer Error for ${url}:`, pError.message);
+            return { html: null, error: pError.message };
+        } finally {
+            if (page) await page.close().catch(() => {}); // Safety close
+        }
+    }
+
+    return { html: null, error: "Both methods failed" };
 }
+
+
 const PRIORITY_KEYWORDS = ['contact', 'about', 'support', 'info', 'reach', 'touch', 'help', 'career'];
 
 async function scrapeEmails(domain, browser) {
