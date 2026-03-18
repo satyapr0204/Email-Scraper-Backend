@@ -9,6 +9,7 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const upload = multer({ dest: 'uploads/' });
 const AdblockerPlugin = require('puppeteer-extra-plugin-adblocker');
+const { getEmailsFromDomain } = require('../utils/scraperHelper');
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 
@@ -347,5 +348,60 @@ emailScrape.post("/clean-domains", uploads.single("file"), (req, res) => {
             res.download(outputPath);
         });
 });
+
+
+
+emailScrape.post('/scrape-email', uploads.single("file"), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const domains = [];
+    
+    // CSV Read stream
+    fs.createReadStream(req.file.path)
+        .pipe(csv())
+        .on('data', (row) => {
+            const domain = row.domain || row.Domain || Object.values(row)[0];
+            if (domain) domains.push(domain.trim());
+        })
+        .on('end', async () => {
+            try {
+                const { default: pLimit } = await import('p-limit');
+                const limit = pLimit(2); // Render free tier ke liye 2-3 safe hai
+
+                console.log(`🚀 Processing ${domains.length} domains...`);
+
+                // Saare domains ko parallel process karo helper function se
+                const tasks = domains.map(domain => limit(() => getEmailsFromDomain(domain)));
+                const results = await Promise.all(tasks);
+
+                // CSV Generate logic
+                const json2csvParser = new Parser({ fields: ['domain', 'emails'] });
+                const csvData = json2csvParser.parse(results);
+                
+                const fileName = `result-${Date.now()}.csv`;
+                const outputPath = `results/${fileName}`;
+                
+                if (!fs.existsSync('results')) fs.mkdirSync('results');
+                fs.writeFileSync(outputPath, csvData);
+
+                // Success Response
+                res.status(200).json({
+                    success: true,
+                    message: `Scraping completed for ${domains.length} domains.`,
+                    downloadUrl: `${process.env.BACKEND_URL}/results/${fileName}`,
+                    data: results // Optional: Frontend pe table dikhane ke liye
+                });
+
+            } catch (error) {
+                console.error("Route Error:", error);
+                res.status(500).json({ error: "Processing failed" });
+            } finally {
+                // Har haal mein temp file delete karo
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            }
+        });
+});
+
+
 
 module.exports = emailScrape;
