@@ -115,9 +115,10 @@ async function getSource(url, browser, headers) {
             const page = await browser.newPage();
             // Sabse important: Bot detection bypass karne ke liye
             await page.setExtraHTTPHeaders(headers);
-
             try {
                 await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                await page.evaluate(() => window.scrollBy(0, window.innerHeight));
                 const html = await page.content();
                 await page.close();
                 return { html, method: 'Puppeteer' };
@@ -257,7 +258,7 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 if (BROWSERLESS_TOKEN) {
                     console.log("🌐 Connecting to Remote Browser...");
                     browser = await puppeteer.connect({
-                        browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`
+                        browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}&stealth&--disable-web-security`
                     });
                 } else {
                     // Agar token nahi hai toh local launch (Sirf testing ke liye)
