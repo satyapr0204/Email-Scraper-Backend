@@ -228,9 +228,23 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             if (row.domain) domains.push(row.domain.trim());
         })
         .on('end', async () => {
+            // const browser = await puppeteer.launch({
+            //     headless: "new",
+            //     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
+            // });
+
             const browser = await puppeteer.launch({
                 headless: "new",
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--single-process',
+                    '--no-zygote'
+                ],
+                // Ye line check karegi ki Render ne kahan install kiya hai
+                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
+                    '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
             });
 
             const { default: pLimit } = await import('p-limit');
