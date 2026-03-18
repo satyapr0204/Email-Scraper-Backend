@@ -304,9 +304,9 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 });
             } catch (err) {
                 console.error("Scraping Error:", err);
-                if (!res.headersSent) res.status(500).send("Error processing file");
+                if (!res.headersSent) res.status(500).send("Error processing file",err);
             } finally {
-                await browser.close();
+                // await browser.close();
                 if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
             }
         });
