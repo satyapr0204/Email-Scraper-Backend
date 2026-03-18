@@ -256,13 +256,13 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             //     browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
             // });
             // Baaki poora code same rahega!
-
+            let browser;
             const { default: pLimit } = await import('p-limit');
             // const limit = pLimit(15);
             const limit = pLimit(3);
             console.log(`🚀 Processing ${domains.length} domains...`);
             try {
-                const browser = await puppeteer.connect({
+                browser = await puppeteer.connect({
                     browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
                 });
                 const tasks = domains.map(domain => limit(() => scrapeEmails(domain, browser)));
@@ -302,7 +302,6 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                     downloadUrl: `${process.env.BACKENd_URL}/results/${fileName}`,
                     fileName: fileName
                 });
-
             } catch (err) {
                 console.error("Scraping Error:", err);
                 if (!res.headersSent) res.status(500).send("Error processing file");
