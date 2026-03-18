@@ -99,8 +99,13 @@ async function getSource(url, browser, headers) {
     try {
         // Try Axios first with full headers
         const response = await axios.get(url, {
-            headers,
-            timeout: 10000,
+            // headers,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://www.google.com/'
+            },
+            timeout: 15000,
             maxRedirects: 5
         });
         return { html: response.data, method: 'Axios' };
@@ -233,19 +238,24 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             //     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
             // });
 
-            const browser = await puppeteer.launch({
-                headless: "new",
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--single-process',
-                    '--no-zygote'
-                ],
-                // Ye line check karegi ki Render ne kahan install kiya hai
-                // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
-                //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
+            // const browser = await puppeteer.launch({
+            //     headless: "new",
+            //     args: [
+            //         '--no-sandbox',
+            //         '--disable-setuid-sandbox',
+            //         '--disable-dev-shm-usage',
+            //         '--single-process',
+            //         '--no-zygote'
+            //     ],
+            //     // Ye line check karegi ki Render ne kahan install kiya hai
+            //     // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
+            //     //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
+            // });
+
+            const browser = await puppeteer.connect({
+                browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
             });
+            // Baaki poora code same rahega!
 
             const { default: pLimit } = await import('p-limit');
             // const limit = pLimit(15);
