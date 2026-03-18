@@ -243,8 +243,8 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                     '--no-zygote'
                 ],
                 // Ye line check karegi ki Render ne kahan install kiya hai
-                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
-                    '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
+                // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
+                //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
             });
 
             const { default: pLimit } = await import('p-limit');
