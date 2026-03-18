@@ -115,26 +115,9 @@ async function getSource(url, browser, headers) {
             const page = await browser.newPage();
             // Sabse important: Bot detection bypass karne ke liye
             await page.setExtraHTTPHeaders(headers);
+
             try {
-                // await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
-                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                // 2. Real user ki tarah scroll karwao (Ye emails trigger karta hai)
-                await page.evaluate(async () => {
-                    await new Promise((resolve) => {
-                        let totalHeight = 0;
-                        let distance = 100;
-                        let timer = setInterval(() => {
-                            let scrollHeight = document.body.scrollHeight;
-                            window.scrollBy(0, distance);
-                            totalHeight += distance;
-                            if (totalHeight >= scrollHeight) {
-                                clearInterval(timer);
-                                resolve();
-                            }
-                        }, 100);
-                    });
-                });
+                await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
                 const html = await page.content();
                 await page.close();
                 return { html, method: 'Puppeteer' };
