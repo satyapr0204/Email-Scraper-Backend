@@ -32,7 +32,6 @@ puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 //     }
 // }
 
-
 function extractFromHtml(html, emailSet) {
     if (!html) return;
 
@@ -56,8 +55,6 @@ function extractFromHtml(html, emailSet) {
     if (matches) matches.forEach(email => addCleanEmail(email, emailSet));
     if (textMatches) textMatches.forEach(email => addCleanEmail(email, emailSet));
 }
-
-
 
 function addCleanEmail(email, emailSet) {
     if (!email) return;
@@ -274,7 +271,7 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 res.status(200).json({
                     success: true,
                     message: `Scraping completed. Found ${filteredResults.length} emails.`,
-                    downloadUrl: `http://localhost:3000/results/${fileName}`,
+                    downloadUrl: `${process.env.BACKENd_URL}/results/${fileName}`,
                     fileName: fileName
                 });
 
