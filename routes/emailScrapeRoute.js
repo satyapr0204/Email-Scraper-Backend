@@ -247,24 +247,32 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             //         '--single-process',
             //         '--no-zygote'
             //     ],
-            //     // Ye line check karegi ki Render ne kahan install kiya hai
-            //     // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
-            //     //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
+            // Ye line check karegi ki Render ne kahan install kiya hai
+            // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
+            //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
             // });
-
-            // const browser = await puppeteer.connect({
-            //     browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
-            // });
-            // Baaki poora code same rahega!
             let browser;
-            const { default: pLimit } = await import('p-limit');
-            // const limit = pLimit(15);
-            const limit = pLimit(3);
-            console.log(`🚀 Processing ${domains.length} domains...`);
             try {
-                browser = await puppeteer.connect({
-                    browserWSEndpoint: `wss://chrome.browserless.io?token=YOUR_FREE_TOKEN`
-                });
+                const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
+                if (BROWSERLESS_TOKEN) {
+                    console.log("🌐 Connecting to Remote Browser...");
+                    browser = await puppeteer.connect({
+                        browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`
+                    });
+                } else {
+                    // Agar token nahi hai toh local launch (Sirf testing ke liye)
+                    console.log("⚠️ No Token found, trying local launch...");
+                    browser = await puppeteer.launch({
+                        headless: "new",
+                        args: ['--no-sandbox', '--disable-setuid-sandbox', '--single-process']
+                    });
+                }
+
+                const { default: pLimit } = await import('p-limit');
+                // const limit = pLimit(15);
+                const limit = pLimit(3);
+                console.log(`🚀 Processing ${domains.length} domains...`);
+
                 const tasks = domains.map(domain => limit(() => scrapeEmails(domain, browser)));
                 const allResults = await Promise.all(tasks);
                 // const filteredResults = allResults.filter(result =>
@@ -302,11 +310,12 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                     downloadUrl: `${process.env.BACKENd_URL}/results/${fileName}`,
                     fileName: fileName
                 });
+
             } catch (err) {
                 console.error("Scraping Error:", err);
-                if (!res.headersSent) res.status(500).send("Error processing file",err);
+                if (!res.headersSent) res.status(500).send("Error processing file", err);
             } finally {
-                // await browser.close();
+                await browser.close();
                 if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
             }
         });
