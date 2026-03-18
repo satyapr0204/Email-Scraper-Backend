@@ -221,7 +221,7 @@ async function scrapeEmails(domain, browser) {
 
 emailScrape.post('/upload', upload.single('file'), (req, res) => {
     const domains = [];
-
+    console.log("domains", domains)
     fs.createReadStream(req.file.path)
         .pipe(csv())
         .on('data', (row) => {
@@ -230,7 +230,7 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
         .on('end', async () => {
             const browser = await puppeteer.launch({
                 headless: "new",
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--single-process']
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
             });
 
             const { default: pLimit } = await import('p-limit');

@@ -8,6 +8,7 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon index.js -w",
+    "build": "npm install && npx puppeteer browsers install chrome",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
