@@ -6,95 +6,64 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { Parser } = require('json2csv');
 const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth')();
 const upload = multer({ dest: 'uploads/' });
 const AdblockerPlugin = require('puppeteer-extra-plugin-adblocker');
 const { getEmailsFromDomain } = require('../utils/scraperHelper');
-puppeteer.use(StealthPlugin());
+puppeteer.use(StealthPlugin);
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 
-// function extractFromHtml(html, emailSet) {
-//     if (!html) return;
-
-//     // 1. Improved Regex (Machine IDs ko ignore karne ke liye thoda strict)
-//     const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b/g;
-
-//     // 2. mailto: extraction (NVIDIA/Corporate sites ke liye)
-//     const $ = cheerio.load(html);
-//     $('a[href^="mailto:"]').each((i, el) => {
-//         let email = $(el).attr('href').replace('mailto:', '').split('?')[0];
-//         addCleanEmail(email, emailSet);
-//     });
-
-//     // 3. Text content extraction
-//     const matches = html.match(EMAIL_REGEX);
-//     if (matches) {
-//         matches.forEach(email => addCleanEmail(email, emailSet));
-//     }
-// }
 
 function extractFromHtml(html, emailSet) {
     if (!html) return;
 
+    // --- STEP 1: Direct HTML Scan (Sabse zyada emails yahan se milenge) ---
+    // Hum pure raw HTML par regex chalayenge bina kuch remove kiye
+    const MASTER_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const rawMatches = html.match(MASTER_REGEX) || [];
+    rawMatches.forEach(email => addCleanEmail(email, emailSet));
+
+    // --- STEP 2: Cloudflare & Obfuscated Scan ---
     const $ = cheerio.load(html);
 
-    // 1. Sabse pehle mailto links nikaalein (Ye sabse accurate hote hain)
-    $('a[href^="mailto:"]').each((i, el) => {
-        let email = $(el).attr('href').replace('mailto:', '').split('?')[0];
-        addCleanEmail(email, emailSet);
+    // Cloudflare specific decode (agar website ne [email protected] kiya ho)
+    $('.__cf_email__').each((i, el) => {
+        const encoded = $(el).data('cfemail');
+        if (encoded) addCleanEmail(cfDecodeEmail(encoded), emailSet);
     });
 
-    // 2. Pure HTML text ko extract karein (par tags ke beech space dekar)
-    // Hum <br> aur </p> jaise tags ko space se replace karenge taaki info@... chipak na jaye
-    let textContent = $('body').text(); // Basic text
+    // Obfuscated ( [at] / [dot] ) logic
+    const OBFUSCATED_REGEX = /[a-zA-Z0-9._%+-]+\s?(\[at\]|\(at\))\s?[a-zA-Z0-9.-]+\s?(\[dot\]|\(dot\))\s?[a-zA-Z]{2,}/gi;
+    const textContent = $('body').text();
+    const obfMatches = textContent.match(OBFUSCATED_REGEX) || [];
 
-    // 3. Regex apply karein pure text par
-    const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const matches = html.match(EMAIL_REGEX); // HTML string se bhi check karein
-    const textMatches = textContent.match(EMAIL_REGEX); // Clean text se bhi check karein
-
-    if (matches) matches.forEach(email => addCleanEmail(email, emailSet));
-    if (textMatches) textMatches.forEach(email => addCleanEmail(email, emailSet));
+    obfMatches.forEach(match => {
+        let clean = match.toLowerCase()
+            .replace(/(\[at\]|\(at\))/g, '@')
+            .replace(/(\[dot\]|\(dot\))/g, '.')
+            .replace(/\s/g, '');
+        addCleanEmail(clean, emailSet);
+    });
 }
 
+// Ye helper function zaroori hai garbage saaf karne ke liye
 function addCleanEmail(email, emailSet) {
-    if (!email) return;
+    if (!email || email.length > 100) return;
 
-    // 1. Basic cleaning: lower case, remove trailing slashes/dots, and whitespace
-    let cleaned = email.toLowerCase()
-        .replace(/u003e/g, '')
-        .replace(/u003c/g, '')
-        .replace(/\/+$/, '') // Remove trailing slashes (techcrunch fix)
-        .replace(/\.+$/, '')  // Remove trailing dots
-        .trim();
+    const cleanEmail = email.trim().toLowerCase();
 
-    // 2. Comprehensive Blacklist
-    const blacklistedWords = [
-        'sentry', 'prober', 'test@', 'example', 'domain.com', 'git@', 'bootstrap',
-        'jquery', 'npm', 'yarn', 'placeholder', 'yourname', 'mybusiness',
-        'mystunningwebsite', 'user@', 'xxx@', 'email.com', 'reply', 'noreply'
-    ];
+    // 1. Check if it's actually an email format
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
 
-    const blacklistedExtensions = [
-        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.js', '.css',
-        '.pdf', '.zip', '.mp4', '.webm', '.ogg', '.ico'
-    ];
+    // 2. Filter out common garbage (very important when scanning raw HTML)
+    const isGarbage = /\.(png|jpg|jpeg|gif|svg|css|js|webp|pdf|zip|woff|woff2|xml|sh)$/i.test(cleanEmail);
 
-    // Check if it's a garbage email
-    const isGarbage = blacklistedWords.some(word => cleaned.includes(word));
-    const isFile = blacklistedExtensions.some(ext => cleaned.endsWith(ext));
-
-    // 3. Logic: Length check + No common library patterns (like react@1.0.js)
-    const isVersionPattern = /@[0-9.]+/.test(cleaned); // Matches things like @16.14.0
-
-    if (!isGarbage && !isFile && !isVersionPattern && cleaned.length > 7 && cleaned.includes('.') && cleaned.length < 50) {
-        // Validation for proper email structure
-        const finalCheck = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned);
-        if (finalCheck) {
-            emailSet.add(cleaned);
-        }
+    if (isValid && !isGarbage) {
+        emailSet.add(cleanEmail);
     }
 }
+
+
 
 async function getSource(url, browser, headers) {
     try {
@@ -115,10 +84,16 @@ async function getSource(url, browser, headers) {
         if (browser) {
             const page = await browser.newPage();
             // Sabse important: Bot detection bypass karne ke liye
+            await page.setDefaultNavigationTimeout(60000); // 60 seconds
+
             await page.setExtraHTTPHeaders(headers);
 
             try {
-                await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+                // 2. Extra Safety: Agar page crash ho toh catch ho jaye
+                page.on('error', err => console.log('Page error:', err));
+                await page.goto(url, { waitUntil: 'networkidle2' });
+                // await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
                 const html = await page.content();
                 await page.close();
                 return { html, method: 'Puppeteer' };
@@ -271,19 +246,28 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 if (BROWSERLESS_TOKEN) {
                     console.log("🌐 Connecting to Remote Browser...");
                     browser = await puppeteer.connect({
-                        browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}&stealth&--disable-web-security`
+                        // browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}&stealth&--disable-web-security`
+                        // Updated Connection String
+                        browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}&stealth&--disable-web-security&blockAds&--window-size=1920,1080`
                     });
                 } else {
                     console.log("⚠️ No Token found, trying local launch...");
                     browser = await puppeteer.launch({
                         headless: "new",
-                        args: ['--no-sandbox', '--disable-setuid-sandbox', '--single-process']
+                        // args: ['--no-sandbox', '--disable-setuid-sandbox', '--single-process']
+                        args: [
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage', // Ye Linux/Render pe crash hone se bachata hai
+                            '--disable-accelerated-2d-canvas',
+                            '--disable-gpu'
+                        ]
                     });
                 }
 
                 const { default: pLimit } = await import('p-limit');
                 // const limit = pLimit(15);
-                const limit = pLimit(1);
+                const limit = pLimit(15);
                 console.log(`🚀 Processing ${domains.length} domains...`);
 
                 const tasks = domains.map(domain => limit(() => scrapeEmails(domain, browser)));
@@ -292,10 +276,10 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 //     result && result.status === 'Success' && result.emails && result.emails.length > 0
                 // );
                 const filteredResults = allResults.filter(result =>
-                    result && result.domain 
+                    result && result.domain
                 );
                 const json2csvParser = new Parser({
-                    fields: ['domain', 'emails'], 
+                    fields: ['domain', 'emails'],
                     quote: '',
                     flatten: true
                 });

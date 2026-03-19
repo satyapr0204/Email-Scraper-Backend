@@ -87,3 +87,95 @@ async function scrapeEmails(domain, browser) {
         status: 'Processed' // Status ko 'Processed' kar dein taaki ye filter mein aa jaye
     };
 }
+
+
+
+
+
+
+
+
+
+
+function extractFromHtml(html, emailSet) {
+    if (!html) return;
+
+    // 1. Improved Regex (Machine IDs ko ignore karne ke liye thoda strict)
+    const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b/g;
+
+    // 2. mailto: extraction (NVIDIA/Corporate sites ke liye)
+    const $ = cheerio.load(html);
+    $('a[href^="mailto:"]').each((i, el) => {
+        let email = $(el).attr('href').replace('mailto:', '').split('?')[0];
+        addCleanEmail(email, emailSet);
+    });
+
+    // 3. Text content extraction
+    const matches = html.match(EMAIL_REGEX);
+    if (matches) {
+        matches.forEach(email => addCleanEmail(email, emailSet));
+    }
+}
+
+function extractFromHtml(html, emailSet) {
+    if (!html) return;
+
+    const $ = cheerio.load(html);
+
+    // 1. Sabse pehle mailto links nikaalein (Ye sabse accurate hote hain)
+    $('a[href^="mailto:"]').each((i, el) => {
+        let email = $(el).attr('href').replace('mailto:', '').split('?')[0];
+        addCleanEmail(email, emailSet);
+    });
+
+    // 2. Pure HTML text ko extract karein (par tags ke beech space dekar)
+    // Hum <br> aur </p> jaise tags ko space se replace karenge taaki info@... chipak na jaye
+    let textContent = $('body').text(); // Basic text
+
+    // 3. Regex apply karein pure text par
+    const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const matches = html.match(EMAIL_REGEX); // HTML string se bhi check karein
+    const textMatches = textContent.match(EMAIL_REGEX); // Clean text se bhi check karein
+
+    if (matches) matches.forEach(email => addCleanEmail(email, emailSet));
+    if (textMatches) textMatches.forEach(email => addCleanEmail(email, emailSet));
+}
+
+function addCleanEmail(email, emailSet) {
+    if (!email) return;
+
+    // 1. Basic cleaning: lower case, remove trailing slashes/dots, and whitespace
+    let cleaned = email.toLowerCase()
+        .replace(/u003e/g, '')
+        .replace(/u003c/g, '')
+        .replace(/\/+$/, '') // Remove trailing slashes (techcrunch fix)
+        .replace(/\.+$/, '')  // Remove trailing dots
+        .trim();
+
+    // 2. Comprehensive Blacklist
+    const blacklistedWords = [
+        'sentry', 'prober', 'test@', 'example', 'domain.com', 'git@', 'bootstrap',
+        'jquery', 'npm', 'yarn', 'placeholder', 'yourname', 'mybusiness',
+        'mystunningwebsite', 'user@', 'xxx@', 'email.com', 'reply', 'noreply'
+    ];
+
+    const blacklistedExtensions = [
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.js', '.css',
+        '.pdf', '.zip', '.mp4', '.webm', '.ogg', '.ico'
+    ];
+
+    // Check if it's a garbage email
+    const isGarbage = blacklistedWords.some(word => cleaned.includes(word));
+    const isFile = blacklistedExtensions.some(ext => cleaned.endsWith(ext));
+
+    // 3. Logic: Length check + No common library patterns (like react@1.0.js)
+    const isVersionPattern = /@[0-9.]+/.test(cleaned); // Matches things like @16.14.0
+
+    if (!isGarbage && !isFile && !isVersionPattern && cleaned.length > 7 && cleaned.includes('.') && cleaned.length < 50) {
+        // Validation for proper email structure
+        const finalCheck = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned);
+        if (finalCheck) {
+            emailSet.add(cleaned);
+        }
+    }
+}
