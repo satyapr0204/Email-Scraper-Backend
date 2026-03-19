@@ -100,13 +100,13 @@ async function getSource(url, browser, headers) {
     try {
         // Try Axios first with full headers
         const response = await axios.get(url, {
-            // headers,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://www.google.com/'
-            },
-            timeout: 15000,
+            headers,
+            // headers: {
+            //     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
+            //     'Accept-Language': 'en-US,en;q=0.9',
+            //     'Referer': 'https://www.google.com/'
+            // },
+            timeout: 100000,
             maxRedirects: 5
         });
         return { html: response.data, method: 'Axios' };
@@ -118,7 +118,7 @@ async function getSource(url, browser, headers) {
             await page.setExtraHTTPHeaders(headers);
 
             try {
-                await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+                await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
                 const html = await page.content();
                 await page.close();
                 return { html, method: 'Puppeteer' };
@@ -152,43 +152,64 @@ async function scrapeEmails(domain, browser) {
         'Cache-Control': 'max-age=0'
     };
 
+    // const isBlocked = (html) => !html || /captcha|Access Denied|detected unusual traffic/i.test(html);
+    const isBlocked = (html) => {
+        if (!html) return true;
+        const isSmallPage = html.length < 5000;
+        const hasBlockKeywords = /captcha|Access Denied|detected unusual traffic/i.test(html);
+
+        if (isSmallPage && hasBlockKeywords) return true;
+
+        // 2. Extra safety: Agar page bilkul hi khali type ka hai
+        if (html.length < 500) return true;
+
+        return false; // Sab sahi hai, aage badho!
+    };
+
     try {
-        // 1. Pehle Axios se koshish karein
+        // --- STEP 1: AXIOS ---
         let source = await getSource(baseUrl, null, headers);
-
-        // 2. Logic: Agar Axios fail hua (null), ya content bahut chhota hai, ya block ho gaya hai
-        const isBlocked = (html) => !html || html.length < 2000 || html.includes('captcha') || html.includes('Access Denied') || html.includes('detected unusual traffic');
-
+        console.log("source axios", source)
+        // --- STEP 2: PUPPETEER (Retry if Axios fails/blocked) ---
+        console.log("after Axios ", isBlocked(source.html))
         if (isBlocked(source.html)) {
-            console.log(`🔄 Axios failed or blocked for ${domain}. Retrying with Puppeteer...`);
-            methodUsed = 'Puppeteer (Retry Mode)';
+            console.log(`🔄 [Tier 2] Axios blocked for ${domain}. Trying Puppeteer...`);
             source = await getSource(baseUrl, browser, headers);
+            console.log("source Puppeteer", source)
+            methodUsed = 'Puppeteer';
         }
+        console.log("after Puppeteer ", isBlocked(source.html))
 
-        // 3. Final check: Agar ab content mil gaya hai
-        if (source && source.html) {
+        // --- STEP 3: BROWSERLESS SMART-SCRAPE (Final Retry if still blocked) ---
+        // Yahan 'if' aayega, 'else' nahi!
+        if (isBlocked(source.html)) {
+            console.log(`🔄 [Tier 3] Puppeteer also failed for ${domain}. Trying Smart-Scrape...`);
+            const smartResult = await getEmailsFromDomain(baseUrl);
+            console.log("smartResult", smartResult)
+            if (smartResult && smartResult.html) {
+                source.html = smartResult.html;
+                methodUsed = 'Smart-Scrape';
+            }
+        }
+        console.log("after smartResult ", isBlocked(source.html))
+        // --- STEP 4: EXTRACTION & INNER PAGES ---
+        if (source && source.html && !isBlocked(source.html)) {
             pagesScanned++;
             extractFromHtml(source.html, allEmails);
-
-            // Agar home page pe email nahi mila, toh inner pages (Contact, About) scan karein
+            // Agar home page pe nahi mila, tabhi inner pages scan karo
             if (allEmails.size === 0) {
                 const $ = cheerio.load(source.html);
                 const priorityLinks = new Set();
-
                 $('a').each((i, el) => {
                     const href = $(el).attr('href');
                     if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
                         try {
                             const fullUrl = new URL(href, baseUrl).href;
-                            const lowerUrl = fullUrl.toLowerCase();
-                            // Apne hi domain ke links scan karein
                             if (fullUrl.includes(domain)) {
+                                const lowerUrl = fullUrl.toLowerCase();
                                 const isMatch = PRIORITY_KEYWORDS.some(k => lowerUrl.includes(k));
-                                const isGarbage = /\.(jpg|jpeg|png|gif|pdf|zip|css|js|mp4|webm|webp|ogg|svg)$/.test(lowerUrl);
-
-                                if (isMatch && !isGarbage) {
-                                    priorityLinks.add(fullUrl);
-                                }
+                                const isGarbage = /\.(jpg|jpeg|png|gif|pdf|zip|css|js|mp4|webp|svg)$/.test(lowerUrl);
+                                if (isMatch && !isGarbage) priorityLinks.add(fullUrl);
                             }
                         } catch (e) { }
                     }
@@ -196,7 +217,8 @@ async function scrapeEmails(domain, browser) {
 
                 const linksToScan = Array.from(priorityLinks).slice(0, 3);
                 for (const link of linksToScan) {
-                    // Inner pages ke liye seedha Puppeteer use karna behtar hai agar main page pe dikat thi
+                    console.log(`🔍 Scanning inner page: ${link}`);
+                    // Inner pages ke liye seedha getSource use karo (Puppeteer)
                     const subSource = await getSource(link, browser, headers);
                     if (subSource && subSource.html) {
                         pagesScanned++;
@@ -204,8 +226,6 @@ async function scrapeEmails(domain, browser) {
                     }
                 }
             }
-        } else {
-            console.log(`❌ No content could be fetched for ${domain} even after Puppeteer retry.`);
         }
 
     } catch (err) {
@@ -213,15 +233,12 @@ async function scrapeEmails(domain, browser) {
     }
 
     const filtered = Array.from(allEmails);
-    // return {
-    //     domain: domain,
-    //     emails: filtered.join(', '),
-    //     status: filtered.length > 0 ? 'Success' : 'Not Found'
-    // };
+    console.log(`✅ [${methodUsed}] ${domain} completed. Found: ${filtered.length}`);
+
     return {
         domain: domain,
-        emails: filtered.length > 0 ? filtered.join(', ') : 'No Email Found', // Email na mile toh 'Not Found' likha aayega
-        status: 'Processed' // Status ko 'Processed' kar dein taaki ye filter mein aa jaye
+        emails: filtered.length > 0 ? filtered.join(', ') : 'No Email Found',
+        status: 'Processed'
     };
 }
 
@@ -236,7 +253,7 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
         .on('end', async () => {
             // const browser = await puppeteer.launch({
             //     headless: "new",
-            //     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
+            //     args: ['--no-sandbox', '--disable-setuid-sandbox',  '--single-process']
             // });
 
             // const browser = await puppeteer.launch({
@@ -248,10 +265,6 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
             //         '--single-process',
             //         '--no-zygote'
             //     ],
-            // Ye line check karegi ki Render ne kahan install kiya hai
-            // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
-            //     '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.66/chrome-linux64/chrome'
-            // });
             let browser;
             try {
                 const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
@@ -261,7 +274,6 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                         browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}&stealth&--disable-web-security`
                     });
                 } else {
-                    // Agar token nahi hai toh local launch (Sirf testing ke liye)
                     console.log("⚠️ No Token found, trying local launch...");
                     browser = await puppeteer.launch({
                         headless: "new",
@@ -280,10 +292,10 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 //     result && result.status === 'Success' && result.emails && result.emails.length > 0
                 // );
                 const filteredResults = allResults.filter(result =>
-                    result && result.domain // Sirf ye check karein ki result exist karta hai
+                    result && result.domain 
                 );
                 const json2csvParser = new Parser({
-                    fields: ['domain', 'emails'], // Sirf ye do columns CSV mein jayenge
+                    fields: ['domain', 'emails'], 
                     quote: '',
                     flatten: true
                 });
@@ -355,7 +367,7 @@ emailScrape.post('/scrape-email', uploads.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const domains = [];
-    
+
     // CSV Read stream
     fs.createReadStream(req.file.path)
         .pipe(csv())
@@ -377,10 +389,10 @@ emailScrape.post('/scrape-email', uploads.single("file"), (req, res) => {
                 // CSV Generate logic
                 const json2csvParser = new Parser({ fields: ['domain', 'emails'] });
                 const csvData = json2csvParser.parse(results);
-                
+
                 const fileName = `result-${Date.now()}.csv`;
                 const outputPath = `results/${fileName}`;
-                
+
                 if (!fs.existsSync('results')) fs.mkdirSync('results');
                 fs.writeFileSync(outputPath, csvData);
 

@@ -5,38 +5,33 @@ const axios = require('axios');
  */
 const getEmailsFromDomain = async (domain) => {
     try {
-        const url = domain.startsWith('http') ? domain : `https://${domain}`;
+        // 1. Header skip logic (Agar domain ki value "Domain" hai toh skip karo)
+        if (domain.toLowerCase() === 'domain') return null;
+
+        // const targetUrl = domain.startsWith('http') ? domain : `https://${domain}`;
         const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
 
-        const response = await axios.post(
-            `https://production-sfo.browserless.io/smart-scrape?token=${BROWSERLESS_TOKEN}`,
-            {
-                url: url,
-                formats: ["html"],
-                waitFor: 3000 // Thoda wait taaki JS load ho jaye
-            },
-            { timeout: 60000 }
-        );
+        // Correct API Endpoint with Token as Query Param
+        const apiUrl = `https://production-sfo.browserless.io/smart-scrape?token=${BROWSERLESS_TOKEN}`;
 
-        if (response.data.ok) {
+        const response = await axios.post(apiUrl, {
+            url: domain,
+            formats: ["html"]
+        }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 30000
+        });
+
+        if (response.data && response.data.ok) {
             const html = response.data.content;
-            // Strong Email Regex
-            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-            const foundEmails = html.match(emailRegex) || [];
-            
-            // Filter unique emails and remove common junk like 'sentry.io' etc if needed
-            const uniqueEmails = [...new Set(foundEmails.map(e => e.toLowerCase()))];
-            
-            return { 
-                domain, 
-                emails: uniqueEmails.length > 0 ? uniqueEmails.join(', ') : "No Email Found",
-                status: 'Success'
-            };
+            return { html: html, method: "3rd" }
         }
-        return { domain, emails: "Failed to load content", status: 'Failed' };
+        return { html: null, error: "No Email found" }
     } catch (err) {
-        console.error(`Error for ${domain}:`, err.message);
-        return { domain, emails: "Connection Error", status: 'Error' };
+        // Detailed log taaki pata chale 400 kyu aaya
+        console.error(`❌ Error for ${domain}:`, err.response ? err.response.data : err.message);
+        // return { domain, emails: "Connection Error", status: 'Error' };
+        return { html: null, error: "No Email found" }
     }
 };
 
