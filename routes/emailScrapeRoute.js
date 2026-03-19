@@ -134,23 +134,21 @@ async function scrapeEmails(domain, browser) {
         const hasBlockKeywords = /captcha|Access Denied|detected unusual traffic/i.test(html);
 
         if (isSmallPage && hasBlockKeywords) return true;
-
-        // 2. Extra safety: Agar page bilkul hi khali type ka hai
         if (html.length < 500) return true;
 
-        return false; // Sab sahi hai, aage badho!
+        return false;
     };
 
     try {
         // --- STEP 1: AXIOS ---
         let source = await getSource(baseUrl, null, headers);
-        console.log("source axios", source)
+        // console.log("source axios", source)
         // --- STEP 2: PUPPETEER (Retry if Axios fails/blocked) ---
         console.log("after Axios ", isBlocked(source.html))
         if (isBlocked(source.html)) {
             console.log(`🔄 [Tier 2] Axios blocked for ${domain}. Trying Puppeteer...`);
             source = await getSource(baseUrl, browser, headers);
-            console.log("source Puppeteer", source)
+            // console.log("source Puppeteer", source)
             methodUsed = 'Puppeteer';
         }
         console.log("after Puppeteer ", isBlocked(source.html))
@@ -160,7 +158,7 @@ async function scrapeEmails(domain, browser) {
         if (isBlocked(source.html)) {
             console.log(`🔄 [Tier 3] Puppeteer also failed for ${domain}. Trying Smart-Scrape...`);
             const smartResult = await getEmailsFromDomain(baseUrl);
-            console.log("smartResult", smartResult)
+            // console.log("smartResult", smartResult)
             if (smartResult && smartResult.html) {
                 source.html = smartResult.html;
                 methodUsed = 'Smart-Scrape';
