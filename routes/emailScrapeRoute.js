@@ -47,22 +47,64 @@ function extractFromHtml(html, emailSet) {
 }
 
 // Ye helper function zaroori hai garbage saaf karne ke liye
+// function addCleanEmail(email, emailSet) {
+//     if (!email || email.length > 100) return;
+
+//     const cleanEmail = email.trim().toLowerCase();
+
+//     // 1. Check if it's actually an email format
+//     const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
+
+//     // 2. Filter out common garbage (very important when scanning raw HTML)
+//     const isGarbage = /\.(png|jpg|jpeg|gif|svg|css|js|webp|pdf|zip|woff|woff2|xml|sh)$/i.test(cleanEmail);
+
+//     if (isValid && !isGarbage) {
+//         emailSet.add(cleanEmail);
+//     }
+// }
+
+
 function addCleanEmail(email, emailSet) {
-    if (!email || email.length > 100) return;
+    // 1. Basic checks
+    if (!email || typeof email !== 'string' || email.length > 100) return;
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Check if it's actually an email format
-    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
+    // --- CONFIGURATION ---
+    const blacklistedWords = [
+        'sentry', 'prober', 'test@', 'example', 'domain.com', 'git@', 'bootstrap',
+        'jquery', 'npm', 'yarn', 'placeholder', 'yourname', 'mybusiness',
+        'mystunningwebsite', 'user@', 'xxx@', 'reply', 'noreply',
+        'sentry.io', 'github.com' // Kuch aur common domains add kiye hain
+    ];
 
-    // 2. Filter out common garbage (very important when scanning raw HTML)
-    const isGarbage = /\.(png|jpg|jpeg|gif|svg|css|js|webp|pdf|zip|woff|woff2|xml|sh)$/i.test(cleanEmail);
+    const blacklistedExtensions = [
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.js', '.css',
+        '.pdf', '.zip', '.mp4', '.webm', '.ogg', '.ico', '.woff', '.woff2',
+        '.xml', '.sh', '.php', '.json'
+    ];
 
-    if (isValid && !isGarbage) {
-        emailSet.add(cleanEmail);
-    }
+    // --- FILTERS ---
+
+    // A. Email Format Validation
+    const isValidFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
+    if (!isValidFormat) return;
+
+    // B. Extension Check (Check if email ends with garbage extension)
+    const hasBadExtension = blacklistedExtensions.some(ext => cleanEmail.endsWith(ext));
+    if (hasBadExtension) return;
+
+    // C. Blacklisted Words Check (Check if email contains any junk word)
+    const hasJunkWord = blacklistedWords.some(word => cleanEmail.includes(word));
+    if (hasJunkWord) return;
+
+    // D. Character Check (Prevent common regex traps like multiple @)
+    if ((cleanEmail.match(/@/g) || []).length !== 1) return;
+
+    // --- FINAL ADDITION ---
+    // Agar sab filters pass ho gaye, tabhi set mein add karein
+    emailSet.add(cleanEmail);
 }
-
 
 
 async function getSource(url, browser, headers) {
