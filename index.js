@@ -12,21 +12,21 @@ const server = http.createServer(app);
 //     // cors: { origin: "https://email-scraper-frontend-seven.vercel.app" } 
 //     cors: { origin: "http://localhost:5174" } 
 // });
-// const io = new Server(server, {
-//     cors: { origin: "http://localhost:5174" },
-//     methods: ["GET", "POST"],
-//     pingTimeout: 60000, // 1 minute tak wait karega agar data nahi aaya toh disconnect nahi hoga
-//     pingInterval: 25000
-// });
-
 const io = new Server(server, {
-    cors: {
-        origin: "https://email-scraper-frontend-seven.vercel.app",
-        methods: ["GET", "POST"],
-        pingTimeout: 60000, // 1 minute tak wait karega agar data nahi aaya toh disconnect nahi hoga
-        pingInterval: 25000
-    }
+    cors: { origin: "http://localhost:5174" },
+    methods: ["GET", "POST"],
+    pingTimeout: 60000, // 1 minute tak wait karega agar data nahi aaya toh disconnect nahi hoga
+    pingInterval: 25000
 });
+
+// const io = new Server(server, {
+//     cors: {
+//         origin: "https://email-scraper-frontend-seven.vercel.app",
+//         methods: ["GET", "POST"],
+//         pingTimeout: 60000, // 1 minute tak wait karega agar data nahi aaya toh disconnect nahi hoga
+//         pingInterval: 25000
+//     }
+// });
 
 app.use(cors());
 app.use(express.json());
