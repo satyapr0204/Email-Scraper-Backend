@@ -206,11 +206,17 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
     const io = req.app.get('socketio');
     const userSocketId = req.body.socketId;
     fs.createReadStream(req.file.path)
-        .pipe(csv())
+        .pipe(csv({ headers: false }))
         .on('data', (row) => {
-            if (row.domain) domains.push(row.domain.trim());
+            console.log("row", row)
+            // if (row.domain) domains.push(row.domain.trim());
+            const firstColumnValue = row['0'] ? row['0'].trim() : null;
+            if (firstColumnValue) {
+                domains.push(firstColumnValue);
+            }
         })
         .on('end', async () => {
+            console.log("domains", domains)
             const totalDomains = domains.length;
             let completedDomains = 0;
             let browser;

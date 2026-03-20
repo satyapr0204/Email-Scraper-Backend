@@ -12,6 +12,12 @@ const server = http.createServer(app);
 //     // cors: { origin: "https://email-scraper-frontend-seven.vercel.app" } 
 //     cors: { origin: "http://localhost:5174" } 
 // });
+// const io = new Server(server, {
+//     cors: {
+//         origin: "http://localhost:5174",
+//         methods: ["GET", "POST"]
+//     }
+// });
 const io = new Server(server, {
     cors: {
         origin: "https://email-scraper-frontend-seven.vercel.app",
