@@ -5,9 +5,19 @@ const cors = require('cors');
 const emailScrape = require('./routes/emailScrapeRoute');
 const path = require('path');
 const morgan = require('morgan');
-
-
-
+const http = require('http');
+const { Server } = require('socket.io');
+const server = http.createServer(app);
+// const io = new Server(server, {
+//     // cors: { origin: "https://email-scraper-frontend-seven.vercel.app" } 
+//     cors: { origin: "http://localhost:5174" } 
+// });
+const io = new Server(server, {
+    cors: {
+        origin: "https://email-scraper-frontend-seven.vercel.app",
+        methods: ["GET", "POST"]
+    }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -25,11 +35,13 @@ app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
+app.set('socketio', io);
+
 // app.listen(PORT, () => {
 //     console.log(`Server is running http://localhost:${PORT}`);
 // });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server is running ${process.env.BACKENd_URL}`);
 });
 app.timeout = 600000; // 10 minute ka timeout (milliseconds mein)
