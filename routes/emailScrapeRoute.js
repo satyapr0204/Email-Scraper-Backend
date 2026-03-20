@@ -249,12 +249,17 @@ emailScrape.post('/upload', upload.single('file'), (req, res) => {
                 const tasks = domains.map(domain => limit(async () => {
                     const result = await scrapeEmails(domain, browser);
                     completedDomains++;
+
+                    // ⭐ Fix: Har domain par nahi, balki har 5 domains ke baad update bhejein
+                    // Ya phir agar last domain ho toh update bhejein
                     if (io && userSocketId) {
-                        io.to(userSocketId).emit('progress', {
-                            current: completedDomains,
-                            total: totalDomains,
-                            percentage: Math.round((completedDomains / totalDomains) * 100)
-                        });
+                        if (completedDomains % 5 === 0 || completedDomains === totalDomains) {
+                            io.to(userSocketId).emit('progress', {
+                                current: completedDomains,
+                                total: totalDomains,
+                                percentage: Math.round((completedDomains / totalDomains) * 100)
+                            });
+                        }
                     }
 
                     return result;

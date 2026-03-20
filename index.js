@@ -13,15 +13,18 @@ const server = http.createServer(app);
 //     cors: { origin: "http://localhost:5174" } 
 // });
 // const io = new Server(server, {
-//     cors: {
-//         origin: "http://localhost:5174",
-//         methods: ["GET", "POST"]
-//     }
+//     cors: { origin: "http://localhost:5174" },
+//     methods: ["GET", "POST"],
+//     pingTimeout: 60000, // 1 minute tak wait karega agar data nahi aaya toh disconnect nahi hoga
+//     pingInterval: 25000
 // });
+
 const io = new Server(server, {
     cors: {
         origin: "https://email-scraper-frontend-seven.vercel.app",
-        methods: ["GET", "POST"]
+        methods: ["GET", "POST"],
+        pingTimeout: 60000, // 1 minute tak wait karega agar data nahi aaya toh disconnect nahi hoga
+        pingInterval: 25000
     }
 });
 
@@ -50,4 +53,6 @@ app.set('socketio', io);
 server.listen(PORT, () => {
     console.log(`Server is running ${process.env.BACKENd_URL}`);
 });
-app.timeout = 600000; // 10 minute ka timeout (milliseconds mein)
+// app.timeout = 600000; // 10 minute ka timeout (milliseconds mein)
+server.timeout = 0;
+server.keepAliveTimeout = 60000 * 2;
